@@ -48,7 +48,7 @@ router.post(
       const prompt = String(req.body.prompt || "Look at image1 (the base character).Look at image2 (the reference item).Automatically identify whether image2 contains a hairstyle, clothing item (shirt, shorts, jacket, etc.), or accessory.Apply the design, color, and style from image2 onto the corresponding part of the character in image1.Keep all other features of image1 unchanged — body, skin tone, pose, background, and unrelated clothing must remain exactly the same.Blend the new element naturally so it looks seamless and realistic on the character.Do not generate anything extra beyond applying the item from image2.");
       if (!prompt) return res.status(400).json({ error: "prompt is required" });
 
-      const rawSize = String(req.body.size || "1024x1024");
+      const rawSize = String(req.body.size || process.env.IMAGE_SIZE || "1024x1024");
       const sizeParam: ImageSize = (allowedSizes as readonly string[]).includes(rawSize)
         ? (rawSize as ImageSize)
         : "1024x1024";
