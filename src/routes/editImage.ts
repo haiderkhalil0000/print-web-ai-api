@@ -42,10 +42,10 @@ function ensureAllowed(
 
 router.post(
   "/edit-image",
-  upload.fields([{ name: "image1" }, { name: "image2" }, { name: "mask" }]),
+  upload.fields([{ name: "image1" }, { name: "image2" }, { name: "image3" }, { name: "image4" }, { name: "mask" }]),
   async (req, res) => {
     try {
-      const prompt = String(req.body.prompt || "Look at image1 (the base character).Look at image2 (the reference item).Automatically identify whether image2 contains a hairstyle, clothing item (shirt, shorts, jacket, etc.), or accessory.Apply the design, color, and style from image2 onto the corresponding part of the character in image1.Keep all other features of image1 unchanged — body, skin tone, pose, background, and unrelated clothing must remain exactly the same.Blend the new element naturally so it looks seamless and realistic on the character.Do not generate anything extra beyond applying the item from image2.");
+      const prompt = String(req.body.prompt || "Look at image1 (the base character). Look at image2, image3, image4, and any additional reference images provided (these represent customization items). Automatically detect what each reference image represents — for example, hairstyle, clothing (shirt, pants, shorts, jacket, etc.), or accessory. For each detected item, completely replace the corresponding part of the base character in image1 with the design, color, and style from the reference image. Keep all other features of image1 unchanged — the body, skin tone, pose, background, and unrelated clothing must remain exactly the same.Blend the new items seamlessly and realistically onto the character so they look natural.Do not generate or invent anything extra. Only use the provided reference images to update the base character.");
       if (!prompt) return res.status(400).json({ error: "prompt is required" });
 
       const rawSize = String(req.body.size || process.env.IMAGE_SIZE || "1024x1024");
@@ -56,15 +56,21 @@ router.post(
       const files = req.files as Record<string, Express.Multer.File[]>;
       const img1 = files?.image1?.[0];
       const img2 = files?.image2?.[0];
+      const img3 = files?.image3?.[0];
+      const img4 = files?.image4?.[0];
       const mask = files?.mask?.[0];
 
       ensureAllowed(img1, "image[0]");
       ensureAllowed(img2, "image[1]");
+      ensureAllowed(img3, "image[2]");
+      ensureAllowed(img4, "image[3]");
       if (mask) ensureAllowed(mask, "mask");
 
       // ✅ Wrap temp paths in ReadStreams so toFile() receives a valid input
       const imgFile1 = await toFile(createReadStream(img1.path), img1.originalname, { type: img1.mimetype });
       const imgFile2 = await toFile(createReadStream(img2.path), img2.originalname, { type: img2.mimetype });
+      const imgFile3 = await toFile(createReadStream(img3.path), img3.originalname, { type: img3.mimetype });
+      const imgFile4 = await toFile(createReadStream(img4.path), img4.originalname, { type: img4.mimetype });
       const maskFile = mask
         ? await toFile(createReadStream(mask.path), mask.originalname, { type: mask.mimetype })
         : undefined;
@@ -72,7 +78,7 @@ router.post(
       const result = await openai.images.edit({
         model: "gpt-image-1",
         prompt,
-        image: [imgFile1, imgFile2],
+        image: [imgFile1, imgFile2, imgFile3, imgFile4],
         ...(maskFile ? { mask: maskFile } : {}),
         size: sizeParam,
         n: 1,
