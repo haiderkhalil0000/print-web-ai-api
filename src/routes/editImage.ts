@@ -167,7 +167,9 @@ Your task:
         prompt,
         image: [imgFile1, imgFile2, imgFile3, imgFile4],
         ...(maskFile ? { mask: maskFile } : {}),
-        size: sizeParam,
+        size: "1024x1536",
+        quality: "medium",
+        background: "transparent",
         n: 1,
       });
 
