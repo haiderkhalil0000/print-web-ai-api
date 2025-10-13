@@ -4,7 +4,7 @@ import multer from "multer";
 import { tmpdir } from "os";
 import { openai } from "../lib/openai";
 import { toFile } from "openai/uploads";
-import { createReadStream } from "fs";
+import { createReadStream, promises as fs } from "fs";
 import sharp from "sharp";
 
 const upload = multer({
@@ -17,8 +17,7 @@ async function resizeWithoutCrop(
   maxWidth = 1024,
   maxHeight = 1024
 ) {
-  const img = sharp(filePath);
-  const metadata = await img.metadata();
+  const metadata = await sharp(filePath).metadata();
 
   if (!metadata.width || !metadata.height) return filePath;
 
@@ -32,13 +31,51 @@ async function resizeWithoutCrop(
 
   const outputPath = filePath + "_resized.png";
 
-  await img
-    .resize(width, height, {
-      fit: "contain", // ensures no cropping
-      background: { r: 0, g: 0, b: 0, alpha: 0 }, // transparent padding
-    })
-    .png()
-    .toFile(outputPath);
+  const maxBytes =
+    Number.parseInt(process.env.OPENAI_IMAGE_MAX_BYTES || "", 10) ||
+    8 * 1024 * 1024;
+  const minDimension = 256;
+  const scaleStep = 0.85;
+
+  let currentWidth = width;
+  let currentHeight = height;
+  let attempt = 0;
+
+  const writeResized = async () => {
+    await sharp(filePath)
+      .resize(currentWidth, currentHeight, {
+        fit: "contain", // ensures no cropping
+        background: { r: 0, g: 0, b: 0, alpha: 0 }, // transparent padding
+      })
+      .png({
+        compressionLevel: 9,
+        adaptiveFiltering: true,
+        palette: true,
+        quality: 90,
+      })
+      .toFile(outputPath);
+  };
+
+  await writeResized();
+
+  if (maxBytes > 0) {
+    let stats = await fs.stat(outputPath);
+
+    while (
+      stats.size > maxBytes &&
+      attempt < 5 &&
+      (currentWidth > minDimension || currentHeight > minDimension)
+    ) {
+      attempt += 1;
+      currentWidth = Math.max(minDimension, Math.round(currentWidth * scaleStep));
+      currentHeight = Math.max(
+        minDimension,
+        Math.round(currentHeight * scaleStep)
+      );
+      await writeResized();
+      stats = await fs.stat(outputPath);
+    }
+  }
 
   return outputPath;
 }
